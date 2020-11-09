@@ -1,0 +1,270 @@
+import sys
+
+# HLT = 0b00000001
+# LDI = 0b10000010
+# PRN = 0b01000111
+# MUL = 0b10100010
+# PUSH = 0b01000101
+# POP = 0b01000110
+# CALL = 0b01010000
+# RET = 0b00010001
+# ADD = 0b10100000
+# CMP = 0b10100111
+# JMP = 0b01010100
+# JEQ = 0b01010101
+# JNE = 0b01010110
+# AND = 0b10101000
+# OR = 0b10101010
+# XOR = 0b10101011
+# NOT = 0b01101001
+# SHL = 0b10101100
+# SHR = 0b10101101
+# MOD = 0b10100100
+
+
+class CPU:
+    """Main CPU class."""
+
+    def __init__(self):
+        """Construct a new CPU."""
+        self.reg = [0] * 8
+        self.ram = [0] * 256
+        self.pc = 0
+        self.running = False
+        self.SP = 7
+        self.reg[self.SP] = 0xF4
+        self.FL = 0b00000000
+        self.branchtable = {}
+        self.branchtable[0b00000001] = self.handle_HLT
+        self.branchtable[0b10000010] = self.handle_LDI
+        self.branchtable[0b01000111] = self.handle_PRN
+        self.branchtable[0b10100010] = self.handle_MUL
+        self.branchtable[0b01000101] = self.handle_PUSH
+        self.branchtable[0b01000110] = self.handle_POP
+        self.branchtable[0b01010000] = self.handle_CALL
+        self.branchtable[0b00010001] = self.handle_RET
+        self.branchtable[0b10100000] = self.handle_ADD
+        self.branchtable[0b10100111] = self.handle_CMP
+        self.branchtable[0b01010100] = self.handle_JMP
+        self.branchtable[0b01010101] = self.handle_JEQ
+        self.branchtable[0b01010110] = self.handle_JNE
+        self.branchtable[0b10101000] = self.handle_AND
+        self.branchtable[0b10101010] = self.handle_OR
+        self.branchtable[0b10101011] = self.handle_XOR
+        self.branchtable[0b01101001] = self.handle_NOT
+        self.branchtable[0b10101100] = self.handle_SHL
+        self.branchtable[0b10101101] = self.handle_SHR
+        self.branchtable[0b10100100] = self.handle_MOD
+
+    def handle_HLT(self):
+        self.running = False
+
+    def handle_LDI(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.reg[operand_a] = operand_b
+        self.pc += 3
+
+    def handle_PRN(self):
+        operand_a = self.ram[self.pc+1]
+        print(self.reg[operand_a])
+        self.pc += 2
+
+    def handle_MUL(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('MUL', operand_a, operand_b)
+        self.pc += 3
+
+    def handle_ADD(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('ADD', operand_a, operand_b)
+        self.pc += 3
+
+    def handle_PUSH(self):
+        self.reg[self.SP] -= 1
+        reg_num = self.ram[self.pc+1]
+        value = self.reg[reg_num]
+        address = self.reg[self.SP]
+        self.ram[address] = value
+
+        self.pc += 2
+
+    def handle_POP(self):
+        reg_num = self.ram[self.pc+1]
+        address = self.reg[self.SP]
+        value = self.ram[address]
+        self.reg[reg_num] = value
+        self.reg[self.SP] += 1
+
+        self.pc += 2
+
+    def handle_CALL(self):
+        return_addr = self.pc + 2
+
+        self.reg[self.SP] -= 1
+        self.ram[self.reg[self.SP]] = return_addr
+
+        reg_num = self.ram[self.pc+1]
+        dest_addr = self.reg[reg_num]
+        self.pc = dest_addr
+
+    def handle_RET(self):
+        return_addr = self.ram[self.reg[self.SP]]
+        self.reg[self.SP] += 1
+
+        self.pc = return_addr
+
+    def handle_CMP(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('CMP', operand_a, operand_b)
+        self.pc += 3
+
+    def handle_JMP(self):
+        reg_num = self.ram[self.pc+1]
+        self.pc = self.reg[reg_num]
+
+    def handle_JEQ(self):
+        reg_num = self.ram[self.pc+1]
+        if self.FL & 0b00000001 == 1:
+            self.pc = self.reg[reg_num]
+        else:
+            self.pc += 2
+
+    def handle_JNE(self):
+        reg_num = self.ram[self.pc+1]
+        if self.FL & 0b00000001 == 0:
+            self.pc = self.reg[reg_num]
+        else:
+            self.pc += 2
+
+    def handle_AND(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('AND', operand_a, operand_b)
+        self.pc += 3
+
+    def handle_OR(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('OR', operand_a, operand_b)
+        self.pc += 3
+
+    def handle_XOR(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('XOR', operand_a, operand_b)
+        self.pc += 3
+
+    def handle_NOT(self):
+        operand_a = self.ram[self.pc+1]
+        self.alu('NOT', operand_a)
+        self.pc += 2
+
+    def handle_SHL(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('SHL', operand_a, operand_b)
+        self.pc += 3
+
+    def handle_SHR(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('SHR', operand_a, operand_b)
+        self.pc += 3
+
+    def handle_MOD(self):
+        operand_a = self.ram[self.pc+1]
+        operand_b = self.ram[self.pc+2]
+        self.alu('MOD', operand_a, operand_b)
+        self.pc += 3
+
+    def load(self):
+        """Load a program into memory."""
+
+        program_filename = sys.argv[1]
+        address = 0
+
+        with open(program_filename) as f:
+            for line in f:
+                line = line.split('#')
+                line = line[0].strip()
+
+                if line == '':
+                    continue
+
+                self.ram[address] = int(line, 2)
+                address += 1
+
+    def alu(self, op, reg_a, reg_b=None):
+        """ALU operations."""
+
+        if op == "ADD":
+            self.reg[reg_a] += self.reg[reg_b]
+        elif op == "MUL":
+            self.reg[reg_a] *= self.reg[reg_b]
+        elif op == "CMP":
+            if self.reg[reg_a] == self.reg[reg_b]:
+                self.FL = 0b00000001
+            elif self.reg[reg_a] < self.reg[reg_b]:
+                self.FL = 0b00000100
+            elif self.reg[reg_a] > self.reg[reg_b]:
+                self.FL = 0b00000010
+        elif op == "AND":
+            self.reg[reg_a] &= self.reg[reg_b]
+        elif op == "OR":
+            self.reg[reg_a] |= self.reg[reg_b]
+        elif op == "XOR":
+            self.reg[reg_a] ^= self.reg[reg_b]
+        elif op == "NOT":
+            self.reg[reg_a] = ~self.reg[reg_a]
+        elif op == "SHL":
+            self.reg[reg_a] <<= self.reg[reg_b]
+        elif op == "SHR":
+            self.reg[reg_a] >>= self.reg[reg_b]
+        elif op == "MOD":
+            self.reg[reg_a] %= self.reg[reg_b]
+        else:
+            raise Exception("Unsupported ALU operation")
+
+    def trace(self):
+        """
+        Handy function to print out the CPU state. You might want to call this
+        from run() if you need help debugging.
+        """
+
+        print(f"TRACE: %02X | %02X %02X %02X |" % (
+            self.pc,
+            self.ram_read(self.pc),
+            self.ram_read(self.pc+1),
+            self.ram_read(self.pc+2)
+        ), end='')
+
+        for i in range(8):
+            print(" %02X" % self.reg[i], end='')
+
+        print()
+
+    def run(self):
+        """Run the CPU."""
+
+        self.running = True
+
+        while self.running:
+            IR = self.ram[self.pc]
+
+            if IR in self.branchtable:
+                function = self.branchtable[IR]
+                function()
+            else:
+                print("Unknown instruction", IR)
+                self.running = False
+
+    def ram_read(self, MAR):
+        MDR = self.ram[MAR]
+        return MDR
+
+    def ram_write(self, MDR, MAR):
+        self.ram[MAR] = MDR
